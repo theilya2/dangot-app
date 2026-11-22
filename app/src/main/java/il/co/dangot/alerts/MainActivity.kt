@@ -55,12 +55,19 @@ class MainActivity : AppCompatActivity() {
             startActivity(i)
         }
 
+        findViewById<Button>(R.id.update_btn).setOnClickListener {
+            Updater.check(this, true)
+        }
+
         refresh(status)
+        // auto-check for a newer build on launch
+        Updater.check(this, false)
     }
 
     private fun refresh(status: TextView) {
         val t = Prefs.tech(this)
-        status.text = if (t != null) "מחובר כ: $t\nהשירות פעיל ברקע." else "בחר טכנאי והירשם."
+        val ver = "גרסה ${BuildConfig.VERSION_NAME}"
+        status.text = if (t != null) "מחובר כ: $t\nהשירות פעיל ברקע.\n$ver" else "בחר טכנאי והירשם.\n$ver"
     }
 
     private fun requestPermissions() {
