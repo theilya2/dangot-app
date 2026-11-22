@@ -26,6 +26,7 @@ class MainActivity : AppCompatActivity() {
         val spinner = findViewById<Spinner>(R.id.tech_spinner)
         val status = findViewById<TextView>(R.id.status)
         val btn = findViewById<Button>(R.id.register_btn)
+        val testBtn = findViewById<Button>(R.id.test_btn)
 
         spinner.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, Const.TECHS)
 
@@ -38,9 +39,20 @@ class MainActivity : AppCompatActivity() {
             val tech = spinner.selectedItem as String
             Prefs.setTech(this, tech)
             requestPermissions()
+            requestOverlay()
             requestBatteryExemption()
             startService()
             refresh(status)
+        }
+
+        testBtn.setOnClickListener {
+            val i = Intent(this, AlertActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                putExtra("id", "TEST-LOCAL")
+                putExtra("title", "בדיקת התראה מקומית")
+                putExtra("text", "אם אתה רואה את זה — מסך ההתראה והצליל עובדים. לחץ אישור.")
+            }
+            startActivity(i)
         }
 
         refresh(status)
@@ -64,6 +76,16 @@ class MainActivity : AppCompatActivity() {
                 startActivity(Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT, Uri.parse("package:$packageName")))
             } catch (_: Exception) {}
         }
+    }
+
+    private fun requestOverlay() {
+        try {
+            if (Build.VERSION.SDK_INT >= 23 && !Settings.canDrawOverlays(this)) {
+                startActivity(
+                    Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName"))
+                )
+            }
+        } catch (_: Exception) {}
     }
 
     @SuppressLint("BatteryLife")

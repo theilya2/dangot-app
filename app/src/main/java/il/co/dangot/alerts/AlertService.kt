@@ -66,12 +66,18 @@ class AlertService : Service() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
         return NotificationCompat.Builder(this, "fg")
-            .setContentTitle("Dangot Notifications פעיל")
+            .setContentTitle("Dangot Notifications")
             .setContentText(text)
             .setSmallIcon(android.R.drawable.ic_popup_reminder)
             .setOngoing(true)
             .setContentIntent(pi)
             .build()
+    }
+
+    private fun updateFg(text: String) {
+        try {
+            getSystemService(NotificationManager::class.java).notify(1, foregroundNotif(text))
+        } catch (_: Exception) {}
     }
 
     private fun startStream() {
@@ -82,11 +88,14 @@ class AlertService : Service() {
             .retryOnConnectionFailure(true)
             .build()
         val url = Const.DB + "/notify/" + Uri.encode(tech) + ".json"
+        updateFg("מתחבר… ($tech)")
         worker = Thread {
             while (running) {
                 try {
                     val req = Request.Builder().url(url).header("Accept", "text/event-stream").build()
                     client!!.newCall(req).execute().use { resp ->
+                        if (!resp.isSuccessful) { updateFg("שגיאת חיבור ${resp.code}"); throw RuntimeException("http ${resp.code}") }
+                        updateFg("מחובר ✓ — מאזין ($tech)")
                         val src = resp.body?.source() ?: return@use
                         var event = ""
                         while (running && !src.exhausted()) {
@@ -98,7 +107,7 @@ class AlertService : Service() {
                         }
                     }
                 } catch (_: Exception) {}
-                if (running) { try { Thread.sleep(3000) } catch (_: Exception) {} }
+                if (running) { updateFg("מתחבר מחדש… ($tech)"); try { Thread.sleep(3000) } catch (_: Exception) {} }
             }
         }
         worker!!.start()
@@ -146,6 +155,8 @@ class AlertService : Service() {
             putExtra("text", text)
             putExtra("title", title)
         }
+        // direct launch (works when app foreground, or with draw-over-other-apps permission)
+        try { startActivity(intent) } catch (_: Exception) {}
         val fsPi = PendingIntent.getActivity(
             this, id.hashCode(), intent,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
