@@ -48,10 +48,19 @@
         android:textColor="#444444" />
 
     <Button
+        android:id="@+id/schedule_btn"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="28dp"
+        android:text="📋 הלו״ז שלי היום"
+        android:textSize="17sp"
+        android:backgroundTint="@color/blueDark" />
+
+    <Button
         android:id="@+id/test_btn"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="40dp"
+        android:layout_marginTop="28dp"
         android:text="🔔 בדיקת התראה מקומית"
         android:textSize="15sp"
         android:backgroundTint="#B00020" />

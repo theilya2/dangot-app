@@ -55,6 +55,13 @@ class MainActivity : AppCompatActivity() {
             startActivity(i)
         }
 
+        findViewById<Button>(R.id.schedule_btn).setOnClickListener {
+            if (Prefs.tech(this) == null) {
+                Prefs.setTech(this, spinner.selectedItem as String)
+            }
+            startActivity(Intent(this, ScheduleActivity::class.java))
+        }
+
         findViewById<Button>(R.id.update_btn).setOnClickListener {
             Updater.check(this, true)
         }
