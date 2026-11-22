@@ -7,6 +7,9 @@ object Prefs {
 
     fun tech(c: Context): String? = p(c).getString("tech", null)
     fun setTech(c: Context, t: String) = p(c).edit().putString("tech", t).apply()
+    fun clearTech(c: Context) = p(c).edit().remove("tech").apply()
+
+    const val RESET_CODE = "dangot67778"
 
     fun seen(c: Context): Set<String> = p(c).getStringSet("seen", HashSet()) ?: HashSet()
     fun isSeen(c: Context, id: String): Boolean = seen(c).contains(id)

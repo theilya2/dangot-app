@@ -16,8 +16,11 @@ import java.util.concurrent.TimeUnit
 class AlertService : Service() {
 
     @Volatile private var running = false
+    @Volatile private var streamGen = 0
+    @Volatile private var currentTech: String? = null
     private var client: OkHttpClient? = null
     private var worker: Thread? = null
+    @Volatile private var call: okhttp3.Call? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -33,9 +36,13 @@ class AlertService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (!running) {
-            running = true
-            startStream()
+        val tech = Prefs.tech(this)
+        if (tech == null) { stopSelf(); return START_NOT_STICKY }
+        running = true
+        if (tech != currentTech) {
+            currentTech = tech
+            try { call?.cancel() } catch (_: Exception) {}
+            startStream(tech)
         }
         return START_STICKY
     }
@@ -80,9 +87,9 @@ class AlertService : Service() {
         } catch (_: Exception) {}
     }
 
-    private fun startStream() {
-        val tech = Prefs.tech(this) ?: run { stopSelf(); return }
-        client = OkHttpClient.Builder()
+    private fun startStream(tech: String) {
+        val myGen = ++streamGen
+        if (client == null) client = OkHttpClient.Builder()
             .readTimeout(0, TimeUnit.MILLISECONDS)
             .connectTimeout(20, TimeUnit.SECONDS)
             .retryOnConnectionFailure(true)
@@ -90,15 +97,16 @@ class AlertService : Service() {
         val url = Const.DB + "/notify/" + Uri.encode(tech) + ".json"
         updateFg("מתחבר… ($tech)")
         worker = Thread {
-            while (running) {
+            while (running && myGen == streamGen) {
                 try {
                     val req = Request.Builder().url(url).header("Accept", "text/event-stream").build()
-                    client!!.newCall(req).execute().use { resp ->
+                    val c = client!!.newCall(req); call = c
+                    c.execute().use { resp ->
                         if (!resp.isSuccessful) { updateFg("שגיאת חיבור ${resp.code}"); throw RuntimeException("http ${resp.code}") }
                         updateFg("מחובר ✓ — מאזין ($tech)")
                         val src = resp.body?.source() ?: return@use
                         var event = ""
-                        while (running && !src.exhausted()) {
+                        while (running && myGen == streamGen && !src.exhausted()) {
                             val line = src.readUtf8Line() ?: break
                             when {
                                 line.startsWith("event:") -> event = line.substring(6).trim()
@@ -107,7 +115,7 @@ class AlertService : Service() {
                         }
                     }
                 } catch (_: Exception) {}
-                if (running) { updateFg("מתחבר מחדש… ($tech)"); try { Thread.sleep(3000) } catch (_: Exception) {} }
+                if (running && myGen == streamGen) { updateFg("מתחבר מחדש… ($tech)"); try { Thread.sleep(3000) } catch (_: Exception) {} }
             }
         }
         worker!!.start()
