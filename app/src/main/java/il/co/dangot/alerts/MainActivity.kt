@@ -18,8 +18,10 @@ import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -258,7 +260,7 @@ class MainActivity : AppCompatActivity() {
         val tech = Prefs.tech(this) ?: return
         progress.visibility = View.VISIBLE
         Thread {
-            val items = ArrayList<JSONObject>()
+            val items = ArrayList<Pair<String, JSONObject>>()
             try {
                 val url = "${Const.DB}/notify/${Uri.encode(tech)}.json"
                 client.newCall(Request.Builder().url(url).build()).execute().use { r ->
@@ -267,31 +269,48 @@ class MainActivity : AppCompatActivity() {
                         val o = JSONObject(b); val keys = o.keys()
                         while (keys.hasNext()) {
                             val k = keys.next(); val n = o.optJSONObject(k) ?: continue
-                            items.add(n)
+                            items.add(k to n)
                         }
                     }
                 }
             } catch (_: Exception) {}
-            items.sortByDescending { it.optLong("ts", 0L) }
+            items.sortByDescending { it.second.optLong("ts", 0L) }
             runOnUiThread {
                 progress.visibility = View.GONE
                 if (tab != 1) return@runOnUiThread
                 content.removeAllViews()
                 val hint = TextView(this)
-                hint.text = "התראות שהתקבלו (נמחקות אוטומטית אחרי אישור)"
+                hint.text = "קריאות שממתינות לאישור. אשר/י כל אחת כאן או בהתראה הקופצת."
                 hint.textSize = 12.5f; hint.setTextColor(Color.parseColor("#9AA3AF")); hint.setPadding(dp(4), 0, dp(4), dp(8))
                 content.addView(hint)
                 if (items.isEmpty()) {
-                    val tv = TextView(this); tv.text = "אין התראות חדשות."
+                    val tv = TextView(this); tv.text = "אין קריאות שממתינות לאישור ✓"
                     tv.textSize = 15f; tv.setTextColor(Color.parseColor("#55606C")); tv.setPadding(dp(8), dp(16), dp(8), dp(8))
                     content.addView(tv); return@runOnUiThread
                 }
-                for (n in items) content.addView(notifCard(n))
+                for ((id, n) in items) content.addView(notifCard(id, n))
             }
         }.start()
     }
 
-    private fun notifCard(n: JSONObject): View {
+    private fun ackNotification(id: String) {
+        val tech = Prefs.tech(this) ?: return
+        if (id.isEmpty()) return
+        Prefs.addSeen(this, id)
+        try { getSystemService(android.app.NotificationManager::class.java).cancel(id.hashCode()) } catch (_: Exception) {}
+        progress.visibility = View.VISIBLE
+        Thread {
+            try {
+                val body = JSONObject().put("tech", tech).put("at", System.currentTimeMillis())
+                    .toString().toRequestBody("application/json".toMediaType())
+                client.newCall(Request.Builder().url(Const.DB + "/ack/" + Uri.encode(id) + ".json").put(body).build()).execute().close()
+                client.newCall(Request.Builder().url(Const.DB + "/notify/" + Uri.encode(tech) + "/" + Uri.encode(id) + ".json").delete().build()).execute().close()
+            } catch (_: Exception) {}
+            runOnUiThread { if (tab == 1) loadNotifications() }
+        }.start()
+    }
+
+    private fun notifCard(id: String, n: JSONObject): View {
         val card = LinearLayout(this)
         card.orientation = LinearLayout.VERTICAL; card.setBackgroundResource(R.drawable.card_bg)
         card.setPadding(dp(14), dp(12), dp(14), dp(12))
@@ -309,12 +328,24 @@ class MainActivity : AppCompatActivity() {
             b.setTextColor(Color.parseColor("#2A2F36")); b.setPadding(0, dp(6), 0, 0); b.setLineSpacing(0f, 1.12f)
             card.addView(b)
         }
+        val footer = LinearLayout(this)
+        footer.orientation = LinearLayout.HORIZONTAL; footer.gravity = Gravity.CENTER_VERTICAL
+        footer.setPadding(0, dp(10), 0, 0)
         val ts = n.optLong("ts", 0L)
-        if (ts > 0) {
-            val d = TextView(this); d.text = SimpleDateFormat("HH:mm · dd/MM", Locale.US).format(Date(ts))
-            d.textSize = 12f; d.setTextColor(Color.parseColor("#9AA3AF")); d.setPadding(0, dp(7), 0, 0)
-            card.addView(d)
-        }
+        val d = TextView(this)
+        d.text = if (ts > 0) SimpleDateFormat("HH:mm · dd/MM", Locale.US).format(Date(ts)) else ""
+        d.textSize = 12f; d.setTextColor(Color.parseColor("#9AA3AF"))
+        d.layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+        footer.addView(d)
+
+        val ack = TextView(this)
+        ack.text = "✓ אשר קבלה"; ack.textSize = 14f; ack.setTypeface(null, Typeface.BOLD)
+        ack.setTextColor(Color.WHITE); ack.setPadding(dp(16), dp(8), dp(16), dp(8))
+        val abg = resources.getDrawable(R.drawable.badge_bg, theme).mutate()
+        abg.setTint(Color.parseColor("#2E7D32")); ack.background = abg
+        ack.setOnClickListener { ackNotification(id) }
+        footer.addView(ack)
+        card.addView(footer)
         return card
     }
 
